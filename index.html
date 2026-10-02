@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Noxia</title>
+<style>
+:root{--bg:#f6f7fb;--card:#fff;--tx:#1d2233;--mu:#6b7285;--ac:#5b5bd6;--ok:#1f9d63;--bd:#e2e5ee;--bot:#eceefa}
+@media (prefers-color-scheme:dark){:root{--bg:#14161f;--card:#1e2130;--tx:#eceef6;--mu:#98a0b6;--ac:#8b8bf0;--ok:#4cc38a;--bd:#2c3044;--bot:#272b40}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--tx);font:16px/1.5 system-ui,-apple-system,Segoe UI,sans-serif;min-height:100vh}
+main{max-width:640px;margin:0 auto;padding:16px;display:flex;flex-direction:column;gap:12px}
+h1{font-size:22px;margin:8px 0 0}
+p.s{color:var(--mu);margin:0}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:14px;padding:16px;display:flex;flex-direction:column;gap:12px}
+label{font-size:14px;color:var(--mu);display:flex;flex-direction:column;gap:4px}
+input,select,textarea{font:inherit;color:var(--tx);background:var(--bg);border:1px solid var(--bd);border-radius:10px;padding:10px}
+button{font:inherit;background:var(--ac);color:#fff;border:0;border-radius:10px;padding:10px 16px;cursor:pointer}
+button:disabled{opacity:.5}
+.ghost{background:transparent;color:var(--mu);padding:2px 4px;font-size:13px;text-decoration:underline}
+.bar{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}
+.pips{display:flex;gap:6px}
+.pip{width:28px;height:8px;border-radius:4px;background:var(--bd)}
+.pip.on{background:var(--ok)}
+#chat{display:flex;flex-direction:column;gap:8px}
+.m{padding:10px 12px;border-radius:12px;max-width:90%;white-space:pre-wrap;overflow-wrap:anywhere}
+.b{background:var(--bot);align-self:flex-start}
+.u{background:var(--ac);color:#fff;align-self:flex-end}
+.t{align-self:center;color:var(--ok);font-weight:600;font-size:14px}
+#row{display:flex;gap:8px}
+#row textarea{flex:1;resize:none}
+.hide{display:none}
+.topic{border-top:1px solid var(--bd);padding-top:8px;margin-top:8px;display:flex;flex-direction:column;gap:4px}
+.topic:first-child{border-top:0;margin-top:0;padding-top:0}
+.small{padding:4px 10px;font-size:13px;align-self:flex-start}
+.foot{text-align:center;padding:8px 0}
+</style>
+</head>
+<body>
+<main>
+  <h1>Noxia</h1>
+  <p class="s">Te ayudo a llegar a la respuesta tú mismo.</p>
+
+  <section id="setup" class="card">
+    <label>Tu nivel educativo
+      <select id="grado">
+        <option>Primaria</option><option>Secundaria</option><option>Preparatoria / Bachillerato</option><option>Universidad</option>
+      </select>
+    </label>
+    <label>Tema
+      <select id="tema-select"><option value="">Cargando temas...</option></select>
+    </label>
+    <label>Materia o tema libre (si no hay uno de tu maestro en la lista)
+      <input id="materia" placeholder="Ej. fracciones, inglés, cálculo, historia">
+    </label>
+    <button id="go">Empezar</button>
+  </section>
+
+  <section id="app" class="hide">
+    <div class="card">
+      <div class="bar">
+        <strong id="lv">Nivel 1</strong>
+        <div class="pips" id="pips"></div>
+        <span class="s" id="st"></span>
+      </div>
+      <div id="chat"></div>
+      <div id="row">
+        <textarea id="inp" rows="2" placeholder="Escribe tu respuesta..."></textarea>
+        <button id="send">Enviar</button>
+      </div>
+    </div>
+  </section>
+
+  <div class="foot"><button id="staff-link" class="ghost">Acceso del personal</button></div>
+
+  <section id="gate" class="card hide">
+    <p class="s">Acceso restringido.</p>
+    <label>Contraseña
+      <input id="pw" type="password" placeholder="Contraseña">
+    </label>
+    <div class="bar">
+      <button id="pw-cancel" class="ghost">Cancelar</button>
+      <button id="pw-go">Entrar</button>
+    </div>
+    <p id="pw-msg" class="s"></p>
+  </section>
+
+  <section id="teacher" class="hide">
+    <div class="card">
+      <div class="bar"><strong>Panel del maestro</strong><button id="t-back" class="ghost">Salir</button></div>
+      <label>Título del tema
+        <input id="t-title" placeholder="Ej. La Revolución Mexicana">
+      </label>
+      <label>Materia
+        <input id="t-materia" placeholder="Ej. Historia">
+      </label>
+      <label>Nivel educativo recomendado
+        <select id="t-grado">
+          <option>Primaria</option><option>Secundaria</option><option>Preparatoria / Bachillerato</option><option>Universidad</option>
+        </select>
+      </label>
+      <label>Contenido / notas del tema (Noxia lo usa para hacer preguntas)
+        <textarea id="t-content" rows="5" placeholder="Pega aquí el resumen, los puntos clave o el contenido que quieres que domine el alumno..."></textarea>
+      </label>
+      <button id="t-save">Guardar tema</button>
+      <p id="t-msg" class="s"></p>
+    </div>
+    <div class="card">
+      <strong>Temas guardados</strong>
+      <div id="t-list" class="s">Cargando...</div>
+    </div>
+  </section>
+</main>
+
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script>
+const firebaseConfig = {
+  apiKey: "AIzaSyAbTzipLyB0KATbPXliy4BgnPBgMFqRbyw",
+  authDomain: "noxia-afb5b.firebaseapp.com",
+  projectId: "noxia-afb5b",
+  storageBucket: "noxia-afb5b.firebasestorage.app",
+  messagingSenderId: "819074844337",
+  appId: "1:819074844337:web:0ca5ceed070daac5d24490"
+};
+firebase.initializeApp(firebaseConfig);
+const db = firebase.firestore();
+const topicsCol = db.collection("topics");
+
+const PASSWORD = "soy alzaqui";
+const LV = { 1: { max: 3, t: "hasta 3 pistas graduales antes de explicar" }, 2: { max: 2, t: "hasta 2 pistas, más directas" }, 3: { max: 1, t: "1 pista y luego la respuesta con explicación breve" } };
+const S = { grado: "", materia: "", contenido: "", level: 1, streak: 0, fails: 0, hist: [], busy: false };
+const $ = id => document.getElementById(id);
+function esc(s) { return (s || "").replace(/[&<>]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c])) }
+
+let topics = [];
+topicsCol.onSnapshot(snap => {
+  topics = snap.docs.map(d => Object.assign({ id: d.id }, d.data()));
+  renderTeacherList(); renderTopicSelect();
+}, () => { $("t-list").textContent = "No se pudieron cargar los temas."; renderTopicSelect() });
+
+function renderTeacherList() {
+  if (!topics.length) { $("t-list").textContent = "Aún no hay temas guardados."; return }
+  $("t-list").innerHTML = topics.map(t => `
+    <div class="topic">
+      <div><strong>${esc(t.title)}</strong> <span class="s">· ${esc(t.materia)} · ${esc(t.grado)}</span></div>
+      <div class="s">${esc((t.content || "").slice(0, 120))}${(t.content || "").length > 120 ? "…" : ""}</div>
+      <button data-del="${esc(t.id)}" class="small ghost">Eliminar</button>
+    </div>`).join("");
+  $("t-list").querySelectorAll("[data-del]").forEach(b => {
+    b.onclick = async () => { try { await topicsCol.doc(b.dataset.del).delete() } catch (e) { } };
+  });
+}
+function renderTopicSelect() {
+  const sel = $("tema-select");
+  if (!topics.length) { sel.innerHTML = '<option value="">(sin temas del maestro, usa el campo de abajo)</option>'; return }
+  sel.innerHTML = '<option value="">-- elige un tema --</option>' +
+    topics.map(t => `<option value="${esc(t.id)}">${esc(t.title)} (${esc(t.materia)})</option>`).join("");
+}
+
+let unlocked = false;
+try { unlocked = sessionStorage.getItem("noxia_staff") === "1" } catch (e) { }
+if (unlocked) { $("setup").classList.add("hide"); $("teacher").classList.remove("hide") }
+
+$("staff-link").onclick = () => { $("gate").classList.remove("hide"); $("pw").focus() };
+$("pw-cancel").onclick = () => { $("gate").classList.add("hide"); $("pw").value = ""; $("pw-msg").textContent = "" };
+$("pw-go").onclick = () => {
+  if ($("pw").value.trim().toLowerCase() === PASSWORD) {
+    try { sessionStorage.setItem("noxia_staff", "1") } catch (e) { }
+    $("gate").classList.add("hide"); $("setup").classList.add("hide"); $("app").classList.add("hide");
+    $("teacher").classList.remove("hide"); $("pw").value = ""; $("pw-msg").textContent = "";
+  } else { $("pw-msg").textContent = "Contraseña incorrecta." }
+};
+$("pw").addEventListener("keydown", e => { if (e.key === "Enter") $("pw-go").click() });
+$("t-back").onclick = () => {
+  try { sessionStorage.removeItem("noxia_staff") } catch (e) { }
+  $("teacher").classList.add("hide"); $("setup").classList.remove("hide");
+};
+
+$("t-save").onclick = async () => {
+  const title = $("t-title").value.trim(), materia = $("t-materia").value.trim(), content = $("t-content").value.trim(), grado = $("t-grado").value;
+  if (!title || !content) { $("t-msg").textContent = "Escribe al menos título y contenido."; return }
+  $("t-msg").textContent = "Guardando...";
+  try {
+    await topicsCol.add({ title, materia: materia || "General", grado, content, createdAt: Date.now() });
+    $("t-title").value = ""; $("t-materia").value = ""; $("t-content").value = "";
+    $("t-msg").textContent = "Tema guardado.";
+  } catch (e) { $("t-msg").textContent = "No se pudo guardar: " + e.message }
+};
+
+function add(cls, txt) { const d = document.createElement("div"); d.className = "m " + cls; d.textContent = txt; $("chat").appendChild(d); d.scrollIntoView({ block: "end" }) }
+function status() {
+  $("lv").textContent = "Nivel " + S.level;
+  $("pips").innerHTML = "";
+  for (let i = 0; i < 3; i++) { const p = document.createElement("div"); p.className = "pip" + (i < S.streak ? " on" : ""); $("pips").appendChild(p) }
+  $("st").textContent = S.streak + "/3 aciertos";
+}
+function promptText() {
+  const L = LV[S.level];
+  return `Eres Noxia, un tutor amable para estudiantes de cualquier materia. Tu meta es que el estudiante APRENDA, no que copie la respuesta.
+Estudiante: ${S.grado}. Materia o tema: ${S.materia}. Adapta lenguaje, ejemplos y dificultad a ese nivel.
+${S.contenido ? `El maestro dejó este contenido/temario; basa TODAS las preguntas y actividades únicamente en él, no inventes otros temas:\n"""\n${S.contenido}\n"""` : ""}
+Nivel actual del estudiante: ${S.level} de 3 (${L.t}). Intentos fallidos en la actividad actual: ${S.fails}. Máximo de intentos fallidos antes de explicar: ${L.max}.
+Reglas:
+- Nunca reveles la respuesta en el primer intento. Da una pregunta guía o pista.
+- Si se equivoca, reconoce lo que está bien y da una pista más directa que la anterior.
+- Si con este fallo se llega al máximo (${S.fails}+1 >= ${L.max}), explica la respuesta paso a paso y propón una nueva actividad.
+- Si acierta, felicítalo, explica brevemente por qué y propón la siguiente actividad, un poco más difícil.
+- Mensajes cortos, en español.
+Responde SOLO con JSON, sin backticks ni texto extra: {"message":"texto para el estudiante","result":"new|correct|incorrect|explained"}
+"new" = primera actividad, "correct" = acertó, "incorrect" = falló y das pista, "explained" = falló y explicaste la respuesta.
+Conversación hasta ahora:
+${S.hist.map(h => (h.r === "u" ? "Estudiante: " : "Noxia: ") + h.t).join("\n") || "(inicio: propón la primera actividad)"}`;
+}
+async function callNoxia(p) {
+  const res = await fetch("/.netlify/functions/noxia", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ prompt: p })
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error((data && data.error) ? JSON.stringify(data.error) : "error");
+  const clean = (data.text || "").replace(/```json|```/g, "").trim();
+  return JSON.parse(clean);
+}
+async function turn() {
+  S.busy = true; $("send").disabled = true;
+  try {
+    const r = await callNoxia(promptText());
+    S.hist.push({ r: "b", t: r.message }); add("b", r.message);
+    if (r.result === "correct") {
+      S.fails = 0; S.streak++;
+      if (S.streak >= 3 && S.level < 3) { S.level++; S.streak = 0; add("t", "¡Subiste al nivel " + S.level + "!") }
+    } else if (r.result === "incorrect") { S.fails++ }
+    else { S.fails = 0; if (r.result === "explained") S.streak = 0 }
+    status();
+  } catch (e) { add("b", "Error: " + e.message) }
+  S.busy = false; $("send").disabled = false;
+}
+$("go").onclick = () => {
+  S.grado = $("grado").value;
+  const tId = $("tema-select").value;
+  const t = topics.find(x => x.id === tId);
+  if (t) { S.materia = t.materia; S.contenido = t.content }
+  else { S.materia = $("materia").value.trim() || "general"; S.contenido = "" }
+  $("setup").classList.add("hide"); $("app").classList.remove("hide");
+  status(); turn();
+};
+function send() {
+  const v = $("inp").value.trim();
+  if (!v || S.busy) return;
+  $("inp").value = ""; S.hist.push({ r: "u", t: v }); add("u", v); turn();
+}
+$("send").onclick = send;
+$("inp").addEventListener("keydown", e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send() } });
+</script>
+</body>
+</html>
