@@ -13,23 +13,21 @@ exports.handler = async function (event) {
     }
     const models = ["gemini-flash-latest", "gemini-2.5-flash", "gemini-3.8-flash"];
     let r, data;
-    for (let attempt = 0; attempt < 6; attempt++) {
-      const model = models[attempt % models.length];
+    for (let attempt = 0; attempt < models.length; attempt++) {
       r = await fetch(
-        "https://generativelanguage.googleapis.com/v1beta/models/" + model + ":generateContent?key=" + apiKey,
+        "https://generativelanguage.googleapis.com/v1beta/models/" + models[attempt] + ":generateContent?key=" + apiKey,
         {
           method: "POST",
           headers: { "content-type": "application/json" },
           body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
         }
       );
-      data = await r.json();
+      try { data = await r.json(); } catch (e2) { data = { error: "respuesta no-JSON de Gemini (" + r.status + ")" } }
       if (r.ok) break;
       if (r.status !== 503 && r.status !== 429) break;
-      await new Promise(res => setTimeout(res, 700));
     }
     if (!r.ok) {
-      return { statusCode: r.status, body: JSON.stringify({ error: data }) };
+      return { statusCode: r.status, body: JSON.stringify({ error: data && data.error ? data.error : data }) };
     }
     const text = (data.candidates && data.candidates[0] && data.candidates[0].content && data.candidates[0].content.parts || [])
       .map(p => p.text || "").join("");
