@@ -11,22 +11,19 @@ exports.handler = async function (event) {
     if (!apiKey) {
       return { statusCode: 500, body: JSON.stringify({ error: "Falta configurar GEMINI_API_KEY en Netlify" }) };
     }
-    let r, data;
-    for (let attempt = 0; attempt < 3; attempt++) {
-      r = await fetch(
-        "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key=" + apiKey,
-        {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
-        }
-      );
-      try { data = await r.json(); } catch (e2) { data = { error: "respuesta no-JSON de Gemini (" + r.status + ")" } }
-      if (r.ok) break;
-      if (r.status !== 503 && r.status !== 429) break;
-    }
+    const r = await fetch(
+      "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key=" + apiKey,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
+      }
+    );
+    let data;
+    try { data = await r.json(); } catch (e2) { data = {} }
     if (!r.ok) {
-      return { statusCode: r.status, body: JSON.stringify({ error: data && data.error ? data.error : data }) };
+      const msg = (data && data.error && (data.error.message || JSON.stringify(data.error))) || ("Gemini respondió " + r.status + " (modelo saturado, intenta de nuevo en unos segundos)");
+      return { statusCode: r.status, body: JSON.stringify({ error: msg }) };
     }
     const text = (data.candidates && data.candidates[0] && data.candidates[0].content && data.candidates[0].content.parts || [])
       .map(p => p.text || "").join("");
