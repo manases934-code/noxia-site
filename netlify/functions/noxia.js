@@ -11,17 +11,23 @@ exports.handler = async function (event) {
     if (!apiKey) {
       return { statusCode: 500, body: JSON.stringify({ error: "Falta configurar GEMINI_API_KEY en Netlify" }) };
     }
-    const r = await fetch(
-      "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key=" + apiKey,
-      {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: prompt }] }]
-        })
-      }
-    );
-    const data = await r.json();
+    const models = ["gemini-flash-latest", "gemini-2.5-flash", "gemini-3.8-flash"];
+    let r, data;
+    for (let attempt = 0; attempt < 6; attempt++) {
+      const model = models[attempt % models.length];
+      r = await fetch(
+        "https://generativelanguage.googleapis.com/v1beta/models/" + model + ":generateContent?key=" + apiKey,
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
+        }
+      );
+      data = await r.json();
+      if (r.ok) break;
+      if (r.status !== 503 && r.status !== 429) break;
+      await new Promise(res => setTimeout(res, 700));
+    }
     if (!r.ok) {
       return { statusCode: r.status, body: JSON.stringify({ error: data }) };
     }
