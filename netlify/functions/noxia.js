@@ -1,5 +1,32 @@
 const BASE = "https://generativelanguage.googleapis.com/v1beta/models";
 
+async function callModel(model, apiKey, prompt) {
+  const r = await fetch(BASE + "/" + model + ":generateContent?key=" + apiKey, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      contents: [{ parts: [{ text: prompt }] }],
+      generationConfig: { responseMimeType: "application/json" }
+    }),
+    signal: AbortSignal.timeout(8000)
+  });
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) {
+    const err = new Error((data.error && data.error.message) || ("HTTP " + r.status));
+    err.status = r.status;
+    err.model = model;
+    throw err;
+  }
+  const parts = (data.candidates && data.candidates[0] && data.candidates[0].content && data.candidates[0].content.parts) || [];
+  const text = parts.map(p => p.text || "").join("");
+  if (!text) {
+    const err = new Error("respuesta vacía");
+    err.model = model;
+    throw err;
+  }
+  return { text, model };
+}
+
 exports.handler = async function (event) {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) {
@@ -17,7 +44,11 @@ exports.handler = async function (event) {
       return {
         statusCode: 200,
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ status: r.status, modelos_disponibles: models, detalle: models.length ? undefined : d })
+        body: JSON.stringify({
+          status: r.status,
+          modelo_configurado: process.env.GEMINI_MODEL || null,
+          modelos_disponibles: models
+        })
       };
     } catch (e) {
       return { statusCode: 500, body: JSON.stringify({ error: String(e) }) };
@@ -28,48 +59,35 @@ exports.handler = async function (event) {
     return { statusCode: 405, body: "Method Not Allowed" };
   }
 
+  let prompt;
   try {
-    const { prompt } = JSON.parse(event.body || "{}");
-    if (!prompt) {
-      return { statusCode: 400, body: JSON.stringify({ error: "Falta el prompt" }) };
-    }
-
-    // El modelo se puede cambiar desde Netlify (variable GEMINI_MODEL) sin tocar el código
-    const primary = process.env.GEMINI_MODEL || "gemini-3.8-flash";
-    const candidates = [primary, "gemini-flash-latest"].filter((m, i, a) => a.indexOf(m) === i);
-
-    let lastStatus = 500, lastMsg = "Sin respuesta de Gemini";
-    for (const model of candidates) {
-      try {
-        const r = await fetch(BASE + "/" + model + ":generateContent?key=" + apiKey, {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({
-            contents: [{ parts: [{ text: prompt }] }],
-            generationConfig: { responseMimeType: "application/json" }
-          }),
-          signal: AbortSignal.timeout(4500)
-        });
-        const data = await r.json().catch(() => ({}));
-        if (r.ok) {
-          const parts = (data.candidates && data.candidates[0] && data.candidates[0].content && data.candidates[0].content.parts) || [];
-          const text = parts.map(p => p.text || "").join("");
-          return {
-            statusCode: 200,
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify({ text, model })
-          };
-        }
-        lastStatus = r.status;
-        lastMsg = (data.error && data.error.message) || ("Gemini respondió " + r.status);
-        if (r.status !== 503 && r.status !== 429 && r.status !== 404) break;
-      } catch (e) {
-        lastStatus = 504;
-        lastMsg = "Gemini tardó demasiado en responder (" + model + ")";
-      }
-    }
-    return { statusCode: lastStatus, body: JSON.stringify({ error: lastMsg }) };
+    prompt = JSON.parse(event.body || "{}").prompt;
   } catch (e) {
-    return { statusCode: 500, body: JSON.stringify({ error: String(e) }) };
+    return { statusCode: 400, body: JSON.stringify({ error: "Solicitud inválida" }) };
+  }
+  if (!prompt) {
+    return { statusCode: 400, body: JSON.stringify({ error: "Falta el prompt" }) };
+  }
+
+  // Se prueban varios modelos a la vez y gana el primero que responda
+  const candidates = [
+    process.env.GEMINI_MODEL,
+    "gemini-3.1-flash-lite",
+    "gemini-3.5-flash-lite",
+    "gemini-3.5-flash"
+  ].filter((m, i, a) => m && a.indexOf(m) === i);
+
+  try {
+    const out = await Promise.any(candidates.map(m => callModel(m, apiKey, prompt)));
+    return {
+      statusCode: 200,
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ text: out.text, model: out.model })
+    };
+  } catch (agg) {
+    const detalle = (agg.errors || [agg])
+      .map(e => (e.model || "?") + ": " + (e.status ? e.status + " " : "") + (e.message || "error"))
+      .join(" | ");
+    return { statusCode: 503, body: JSON.stringify({ error: detalle }) };
   }
 };
