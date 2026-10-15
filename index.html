@@ -231,10 +231,20 @@ Reglas:
 - Si con este fallo se llega al máximo (${S.fails}+1 >= ${L.max}), explica la respuesta paso a paso y propón una nueva actividad.
 - Si acierta, felicítalo, explica brevemente por qué y propón la siguiente actividad, un poco más difícil.
 - Mensajes cortos, en español.
+- Escribe las matemáticas en texto plano con símbolos como √, ², ×, ÷ y fracciones como 3/4. Nunca uses LaTeX ni signos de dólar para fórmulas.
 Responde SOLO con JSON, sin backticks ni texto extra: {"message":"texto para el estudiante","result":"new|correct|incorrect|explained"}
 "new" = primera actividad, "correct" = acertó, "incorrect" = falló y das pista, "explained" = falló y explicaste la respuesta.
 Conversación hasta ahora:
 ${S.hist.map(h => (h.r === "u" ? "Estudiante: " : "Noxia: ") + h.t).join("\n") || "(inicio: propón la primera actividad)"}`;
+}
+function clean(t) {
+  return (t || "")
+    .replace(/\$([^$\n]+)\$/g, (m, x) => /[\\^{}_]/.test(x) ? x : m)
+    .replace(/\\sqrt\{([^}]*)\}/g, "√($1)")
+    .replace(/\\frac\{([^}]*)\}\{([^}]*)\}/g, "($1)/($2)")
+    .replace(/\\times/g, "×").replace(/\\div/g, "÷").replace(/\\cdot/g, "·")
+    .replace(/\^2/g, "²").replace(/\^3/g, "³")
+    .replace(/\\[()\[\]]/g, "");
 }
 async function callNoxia(p) {
   const res = await fetch("/.netlify/functions/noxia", {
@@ -251,7 +261,7 @@ async function turn() {
   S.busy = true; $("send").disabled = true;
   try {
     const r = await callNoxia(promptText());
-    S.hist.push({ r: "b", t: r.message }); add("b", r.message);
+    const m = clean(r.message); S.hist.push({ r: "b", t: m }); add("b", m);
     if (r.result === "correct") {
       S.fails = 0; S.streak++;
       if (S.streak >= 3 && S.level < 3) { S.level++; S.streak = 0; add("t", "¡Subiste al nivel " + S.level + "!") }
