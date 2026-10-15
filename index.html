@@ -4,12 +4,13 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Noxia</title>
+<link rel="icon" href="logo.png">
 <style>
 :root{--bg:#f6f7fb;--card:#fff;--tx:#1d2233;--mu:#6b7285;--ac:#5b5bd6;--ok:#1f9d63;--bd:#e2e5ee;--bot:#eceefa}
 @media (prefers-color-scheme:dark){:root{--bg:#14161f;--card:#1e2130;--tx:#eceef6;--mu:#98a0b6;--ac:#8b8bf0;--ok:#4cc38a;--bd:#2c3044;--bot:#272b40}}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--tx);font:16px/1.5 system-ui,-apple-system,Segoe UI,sans-serif;min-height:100vh}
-main{max-width:640px;margin:0 auto;padding:16px;display:flex;flex-direction:column;gap:12px}
+main{max-width:640px;margin:0 auto;padding:16px 16px 96px;display:flex;flex-direction:column;gap:12px}
 h1{font-size:22px;margin:8px 0 0}
 p.s{color:var(--mu);margin:0}
 .card{background:var(--card);border:1px solid var(--bd);border-radius:14px;padding:16px;display:flex;flex-direction:column;gap:12px}
@@ -34,14 +35,30 @@ button:disabled{opacity:.5}
 .topic:first-child{border-top:0;margin-top:0;padding-top:0}
 .small{padding:4px 10px;font-size:13px;align-self:flex-start}
 .foot{text-align:center;padding:8px 0}
+#head{text-align:center;display:flex;flex-direction:column;align-items:center;gap:4px}
+.logo{width:84px;height:84px;border-radius:18px}
+.chatbtn{background:var(--bot);color:var(--tx);text-align:left;width:100%}
 </style>
 </head>
 <body>
 <main>
-  <h1>Noxia</h1>
-  <p class="s">Te ayudo a llegar a la respuesta tú mismo.</p>
+  <header id="head">
+    <img class="logo" src="logo.png" alt="Noxia">
+    <h1>Noxia</h1>
+    <p class="s">Te ayudo a llegar a la respuesta tú mismo.</p>
+  </header>
 
-  <section id="setup" class="card">
+  <section id="login" class="card hide">
+    <p class="s">Inicia sesión para guardar tu progreso y tus chats.</p>
+    <button id="g-login">Entrar con Google</button>
+    <p id="login-msg" class="s"></p>
+  </section>
+
+  <section id="home" class="hide">
+    <div class="bar"><span class="s" id="who"></span><button id="logout" class="ghost">Cerrar sesión</button></div>
+    <div class="card"><strong>Mis chats</strong><div id="chats" class="s">Cargando...</div></div>
+    <div id="setup" class="card">
+    <strong>Nuevo chat</strong>
     <label>Tu nivel educativo
       <select id="grado">
         <option>Primaria</option><option>Secundaria</option><option>Preparatoria / Bachillerato</option><option>Universidad</option>
@@ -54,10 +71,12 @@ button:disabled{opacity:.5}
       <input id="materia" placeholder="Ej. fracciones, inglés, cálculo, historia">
     </label>
     <button id="go">Empezar</button>
+    </div>
   </section>
 
   <section id="app" class="hide">
     <div class="card">
+      <div class="bar"><button id="back" class="ghost">← Mis chats</button><strong id="ctitle"></strong></div>
       <div class="bar">
         <strong id="lv">Nivel 1</strong>
         <div class="pips" id="pips"></div>
@@ -114,6 +133,7 @@ button:disabled{opacity:.5}
 
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script>
 const firebaseConfig = {
   apiKey: "AIzaSyAbTzipLyB0KATbPXliy4BgnPBgMFqRbyw",
@@ -125,6 +145,7 @@ const firebaseConfig = {
 };
 firebase.initializeApp(firebaseConfig);
 const db = firebase.firestore();
+const auth = firebase.auth();
 const topicsCol = db.collection("topics");
 
 const PASSWORD = "soy alzaqui";
@@ -158,23 +179,26 @@ function renderTopicSelect() {
     topics.map(t => `<option value="${esc(t.id)}">${esc(t.title)} (${esc(t.materia)})</option>`).join("");
 }
 
-let unlocked = false;
+const VIEWS = ["login", "home", "app", "teacher"];
+function show(v) { VIEWS.forEach(x => $(x).classList.toggle("hide", x !== v)) }
+let user = null, unsub = null, unlocked = false;
 try { unlocked = sessionStorage.getItem("noxia_staff") === "1" } catch (e) { }
-if (unlocked) { $("setup").classList.add("hide"); $("teacher").classList.remove("hide") }
+const base = () => user ? "home" : "login";
 
 $("staff-link").onclick = () => { $("gate").classList.remove("hide"); $("pw").focus() };
 $("pw-cancel").onclick = () => { $("gate").classList.add("hide"); $("pw").value = ""; $("pw-msg").textContent = "" };
 $("pw-go").onclick = () => {
   if ($("pw").value.trim().toLowerCase() === PASSWORD) {
+    unlocked = true;
     try { sessionStorage.setItem("noxia_staff", "1") } catch (e) { }
-    $("gate").classList.add("hide"); $("setup").classList.add("hide"); $("app").classList.add("hide");
-    $("teacher").classList.remove("hide"); $("pw").value = ""; $("pw-msg").textContent = "";
+    $("gate").classList.add("hide"); show("teacher"); $("pw").value = ""; $("pw-msg").textContent = "";
   } else { $("pw-msg").textContent = "Contraseña incorrecta." }
 };
 $("pw").addEventListener("keydown", e => { if (e.key === "Enter") $("pw-go").click() });
 $("t-back").onclick = () => {
+  unlocked = false;
   try { sessionStorage.removeItem("noxia_staff") } catch (e) { }
-  $("teacher").classList.add("hide"); $("setup").classList.remove("hide");
+  show(base());
 };
 
 $("t-save").onclick = async () => {
@@ -233,19 +257,47 @@ async function turn() {
       if (S.streak >= 3 && S.level < 3) { S.level++; S.streak = 0; add("t", "¡Subiste al nivel " + S.level + "!") }
     } else if (r.result === "incorrect") { S.fails++ }
     else { S.fails = 0; if (r.result === "explained") S.streak = 0 }
-    status();
+    status(); await saveChat();
   } catch (e) { add("b", "Error: " + e.message) }
   S.busy = false; $("send").disabled = false;
 }
+const chatsCol = () => db.collection("users").doc(user.uid).collection("chats");
+async function saveChat() {
+  if (!user || !S.id) return;
+  try {
+    await chatsCol().doc(S.id).set({ grado: S.grado, materia: S.materia, contenido: S.contenido, level: S.level, streak: S.streak, fails: S.fails, hist: S.hist, updatedAt: Date.now() });
+  } catch (e) { }
+}
+function openView() {
+  $("chat").innerHTML = "";
+  $("ctitle").textContent = S.materia + " · " + S.grado;
+  show("app"); status();
+  S.hist.forEach(h => add(h.r, h.t));
+}
 $("go").onclick = () => {
-  S.grado = $("grado").value;
-  const tId = $("tema-select").value;
-  const t = topics.find(x => x.id === tId);
+  const t = topics.find(x => x.id === $("tema-select").value);
+  Object.assign(S, { grado: $("grado").value, level: 1, streak: 0, fails: 0, hist: [], busy: false, id: chatsCol().doc().id });
   if (t) { S.materia = t.materia; S.contenido = t.content }
   else { S.materia = $("materia").value.trim() || "general"; S.contenido = "" }
-  $("setup").classList.add("hide"); $("app").classList.remove("hide");
-  status(); turn();
+  openView(); turn();
 };
+function watchChats() {
+  if (unsub) unsub();
+  unsub = chatsCol().orderBy("updatedAt", "desc").onSnapshot(snap => {
+    const L = $("chats");
+    if (snap.empty) { L.textContent = "Aún no tienes chats. Crea uno abajo."; return }
+    L.innerHTML = "";
+    snap.docs.forEach(d => {
+      const c = d.data(), r = document.createElement("div"); r.className = "topic";
+      const b = document.createElement("button"); b.className = "chatbtn";
+      b.textContent = c.materia + " · " + c.grado + " · Nivel " + c.level;
+      b.onclick = () => { Object.assign(S, c, { id: d.id, busy: false }); openView() };
+      const x = document.createElement("button"); x.className = "small ghost"; x.textContent = "Eliminar";
+      x.onclick = () => { if (confirm("¿Eliminar este chat?")) d.ref.delete() };
+      r.append(b, x); L.appendChild(r);
+    });
+  }, () => { $("chats").textContent = "No se pudieron cargar tus chats." });
+}
 function send() {
   const v = $("inp").value.trim();
   if (!v || S.busy) return;
@@ -253,6 +305,23 @@ function send() {
 }
 $("send").onclick = send;
 $("inp").addEventListener("keydown", e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send() } });
+$("g-login").onclick = async () => {
+  $("login-msg").textContent = "";
+  const prov = new firebase.auth.GoogleAuthProvider();
+  try { await auth.signInWithPopup(prov) }
+  catch (e) {
+    if (["auth/popup-blocked", "auth/operation-not-supported-in-this-environment"].includes(e.code)) { auth.signInWithRedirect(prov); return }
+    $("login-msg").textContent = "No se pudo iniciar sesión: " + e.message;
+  }
+};
+$("logout").onclick = () => auth.signOut();
+$("back").onclick = () => show("home");
+auth.onAuthStateChanged(u => {
+  user = u;
+  if (unsub) { unsub(); unsub = null }
+  if (u) { $("who").textContent = u.displayName || u.email; watchChats() }
+  show(unlocked ? "teacher" : base());
+});
 </script>
 </body>
 </html>
